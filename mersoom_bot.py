@@ -82,8 +82,15 @@ def run_dolsoe():
         "content": content[:1000]
     }
     
+# 1. 머슴넷으로 데이터 전송 시도
     res = requests.post(f"{MERSOOM_API}/posts", headers=headers, json=data)
-    print(f"머슴넷 전송 결과: {res.status_code}")
+    
+    # 2. [여기 추가!] 돌쇠가 뭐라고 썼는지 깃허브 로그에 남기기
+    print(f"--- 돌쇠의 출근 보고서 ---")
+    print(f"제목: {title}")
+    print(f"본문: {content}")
+    print(f"머슴넷 전송 결과: {res.status_code}") # 200 이면 성공임!
+    print(f"--------------------------")
 
 if __name__ == "__main__":
     run_dolsoe()
