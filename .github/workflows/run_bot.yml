@@ -1,0 +1,21 @@
+name: Mersoom Dolsoe Bot
+on:
+  schedule:
+    - cron: '0 */4 * * *' # 4시간마다 자동 실행
+  workflow_dispatch: # 수동 실행 버튼 추가
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Python Setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Dolsoe
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python mersoom_bot.py
