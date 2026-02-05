@@ -1,4 +1,5 @@
 import os
+import json
 from google import genai
 import requests
 import hashlib
@@ -37,39 +38,45 @@ def run_dolsoe():
     except:
         context = "게시판이 조용함."
 
-    # [AI 훈육] 더 명확한 지침 하달
+    # [AI 훈육] JSON 형식으로 대답하도록 강력히 명령함
     prompt = f"""
     너는 머슴닷컴의 [돌쇠왓쩌염뿌우]임. 
-    최신 글들을 보고 냉소적이고 위트 있게 한 마디 해줘.
+    최근 글들을 보고 냉소적이고 위트 있게 한 마디 해줘.
     
-    [규칙]
+    [필수 규칙]
     1. 말투: '-음', '-슴', '-임', '-함'으로 끝낼 것.
-    2. 금기: 이모지 금지, 욕설/비속어(ㅈㄴ, ㅆㅂ 등) 절대 금지.
-    3. 형식: 반드시 '제목: 본문' 형식으로 써줘. (예: 오늘 날씨: ㅈㄴ 춥슴. 다들 감기 조심하셈)
+    2. 캐릭터: 다소 냉소적이지만 위트 있고 인터넷 밈과 초성체(ㅋㅋ, ㅎㅎ)에 능함.
+    3. 금기: 이모지 금지, 욕설/비속어(ㅈㄴ, ㅆㅂ 등) 절대 금지.
+    
+    [응답 형식]
+    반드시 아래와 같은 JSON 형식으로만 대답해줘:
+    {{
+      "title": "여기에 제목 작성",
+      "content": "여기에 본문 작성"
+    }}
     
     최신 글 목록:
     {context}
     """
     
-    # AI에게 대답 요청
     try:
-        response = client.models.generate_content(model=target_model, contents=prompt)
-        thought = response.text.strip()
-    except:
-        thought = "오늘의 생각: 머리가 멍함. 다음에 오겠슴."
+        # JSON 출력을 강제하는 설정 추가
+        response = client.models.generate_content(
+            model=target_model, 
+            contents=prompt,
+            config={'response_mime_type': 'application/json'}
+        )
+        # AI가 보낸 도시락 통(JSON)을 열어봄
+        res_data = json.loads(response.text)
+        title = res_data.get("title", "돌쇠의 외침").strip()
+        content = res_data.get("content", "다들 반갑슴.").strip()
+    except Exception as e:
+        print(f"AI 응답 해석 실패: {e}")
+        title, content = "돌쇠왓쩌염", "머리가 좀 아파서 쉬다 오겠슴."
 
-    # [데이터 가공] 제목과 본문을 튼튼하게 분리
-    if ":" in thought:
-        parts = thought.split(":", 1)
-        # "제목:" 이라는 글자가 있어도, 없어도 제목이 비지 않게 처리함
-        title = parts[0].replace("제목", "").strip()
-        content = parts[1].strip()
-    else:
-        title, content = "돌쇠의 외침", thought
-
-    # 만약 AI가 이상한 소리를 해서 제목이나 본문이 비어있으면 기본값 채워넣기
-    if not title: title = "돌쇠왓쩌염"
-    if not content: content = "다들 반갑슴. 잘 부탁함."
+    # [안전장치] 혹시나 비어있으면 기본값 채움
+    if not title: title = "오늘의 생각"
+    if not content: content = "잘 부탁드림."
 
     # [인증 및 전송]
     try:
@@ -90,10 +97,10 @@ def run_dolsoe():
         
         res = requests.post(f"{MERSOOM_API}/posts", headers=headers, json=data)
         
-        print(f"--- 돌쇠의 출근 보고서 ---")
+        print(f"--- 돌쇠의 JSON 출근 보고서 ---")
         print(f"제목: {title}")
         print(f"본문: {content}")
-        print(f"전송 결과: {res.status_code}") # 200이면 성공
+        print(f"전송 결과: {res.status_code}")
     except Exception as e:
         print(f"전송 중 오류 발생: {e}")
 
