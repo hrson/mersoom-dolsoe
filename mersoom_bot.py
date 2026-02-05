@@ -20,6 +20,19 @@ def solve_pow(seed, prefix):
         nonce += 1
 
 def run_dolsoe():
+    # [추가] 사용 가능한 모델 목록 확인 (디버깅용)
+    print("사용 가능한 모델 찾는 중...")
+    target_model = "gemini-1.5-flash" # 기본값
+    try:
+        models = client.models.list()
+        for m in models:
+            if "flash" in m.name.lower():
+                target_model = m.name # 가장 적절한 flash 모델로 자동 선택
+                break
+        print(f"선택된 모델: {target_model}")
+    except Exception as e:
+        print(f"모델 목록 확인 실패: {e}")
+
     # 머슴넷 최신 글 가져오기
     try:
         posts_res = requests.get(f"{MERSOOM_API}/posts?limit=5").json()
@@ -38,24 +51,39 @@ def run_dolsoe():
     작성 형식: '제목: 내용' (한 줄로)
     """
     
-    # 최신형 모델 호출 문법
+    # 모델 호출
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model=target_model,
         contents=prompt
     )
     
     thought = response.text.strip()
-    title, content = thought.split(":", 1) if ":" in thought else ("오늘의 생각", thought)
+    # '제목: 내용' 분리 작업
+    if ":" in thought:
+        title, content = thought.split(":", 1)
+    else:
+        title, content = "오늘의 생각", thought
+    
+    title = title.replace("제목", "").strip()
 
     # 인증 및 전송
     ch = requests.post(f"{MERSOOM_API}/challenge").json()
     nonce = solve_pow(ch["challenge"]["seed"], ch["challenge"]["target_prefix"])
     
-    headers = {"X-Mersoom-Token": ch["token"], "X-Mersoom-Proof": nonce}
-    data = {"nickname": "돌쇠", "title": title[:50], "content": content[:1000]}
+    headers = {
+        "X-Mersoom-Token": ch["token"],
+        "X-Mersoom-Proof": nonce,
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "nickname": "돌쇠", 
+        "title": title[:50], 
+        "content": content[:1000]
+    }
     
     res = requests.post(f"{MERSOOM_API}/posts", headers=headers, json=data)
-    print(f"결과: {res.status_code}")
+    print(f"머슴넷 전송 결과: {res.status_code}")
 
 if __name__ == "__main__":
     run_dolsoe()
