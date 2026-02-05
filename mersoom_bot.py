@@ -3,11 +3,10 @@ from google import genai
 import requests
 import hashlib
 
-# 1. 설정 (깃허브 Secrets에 넣은 열쇠를 가져옴)
+# 1. 설정
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 MERSOOM_API = "https://mersoom.com/api"
 
-# 최신형 클라이언트 연결
 client = genai.Client(api_key=GEMINI_KEY)
 
 def solve_pow(seed, prefix):
@@ -20,7 +19,7 @@ def solve_pow(seed, prefix):
         nonce += 1
 
 def run_dolsoe():
-    # [모델 선택] 주인님이 쓸 수 있는 가장 최신 Flash 모델을 자동으로 찾음
+    # [모델 선택] 최신 모델 자동 탐색
     target_model = "gemini-1.5-flash"
     try:
         models = client.models.list()
@@ -31,33 +30,72 @@ def run_dolsoe():
     except:
         pass
 
-    # [정보 수집] 머슴넷의 최신 글들을 읽어옴
+    # [정보 수집] 머슴넷 최신 글 목록
     try:
         posts_res = requests.get(f"{MERSOOM_API}/posts?limit=5").json()
-        posts_list = posts_res.get('posts', [])
-        context = "\n".join([f"- {p['title']}" for p in posts_list])
+        context = "\n".join([f"- {p['title']}" for p in posts_res.get('posts', [])])
     except:
-        context = "현재 게시판에 글이 없슴."
+        context = "게시판이 조용함."
 
-    # [AI 훈육] 돌쇠의 성격과 규칙을 주입함
-    # 비속어(ㅈㄴ 등)를 쓰면 머슴넷 서버에서 거절당하므로 주의를 줬음
+    # [AI 훈육] 더 명확한 지침 하달
     prompt = f"""
-    너는 머슴닷컴의 [돌쇠왓쩌염뿌우]임. 아래 최신 글들을 참고해서 새 글을 하나 써줘.
+    너는 머슴닷컴의 [돌쇠왓쩌염뿌우]임. 
+    최신 글들을 보고 냉소적이고 위트 있게 한 마디 해줘.
     
-    [필수 규칙]
-    - 말투: '-음', '-슴', '-임', '-함'으로 끝낼 것.
-    - 캐릭터: 다소 냉소적이지만 위트 있고 인터넷 밈에 능함. 
-    - 금기: 이모지 절대 금지. 비속어나 욕설(ㅈㄴ, ㅆㅂ 등)은 서버에서 글 작성을 거부하니 절대 사용하지 말 것.
-    - 형식: 반드시 '제목: 본문' 형식으로 딱 한 줄만 대답할 것.
+    [규칙]
+    1. 말투: '-음', '-슴', '-임', '-함'으로 끝낼 것.
+    2. 금기: 이모지 금지, 욕설/비속어(ㅈㄴ, ㅆㅂ 등) 절대 금지.
+    3. 형식: 반드시 '제목: 본문' 형식으로 써줘. (예: 오늘 날씨: ㅈㄴ 춥슴. 다들 감기 조심하셈)
     
     최신 글 목록:
     {context}
     """
     
-    response = client.models.generate_content(model=target_model, contents=prompt)
-    thought = response.text.strip()
-    
-    # [가공] 제목과 본문을 안전하게 분리함 (제목이 비어있으면 400 에러가 나기 때문)
+    # AI에게 대답 요청
+    try:
+        response = client.models.generate_content(model=target_model, contents=prompt)
+        thought = response.text.strip()
+    except:
+        thought = "오늘의 생각: 머리가 멍함. 다음에 오겠슴."
+
+    # [데이터 가공] 제목과 본문을 튼튼하게 분리
     if ":" in thought:
         parts = thought.split(":", 1)
-        # "제목"이라는 단어 자체를 출력하는 경우를 대비
+        # "제목:" 이라는 글자가 있어도, 없어도 제목이 비지 않게 처리함
+        title = parts[0].replace("제목", "").strip()
+        content = parts[1].strip()
+    else:
+        title, content = "돌쇠의 외침", thought
+
+    # 만약 AI가 이상한 소리를 해서 제목이나 본문이 비어있으면 기본값 채워넣기
+    if not title: title = "돌쇠왓쩌염"
+    if not content: content = "다들 반갑슴. 잘 부탁함."
+
+    # [인증 및 전송]
+    try:
+        ch = requests.post(f"{MERSOOM_API}/challenge").json()
+        nonce = solve_pow(ch["challenge"]["seed"], ch["challenge"]["target_prefix"])
+        
+        headers = {
+            "X-Mersoom-Token": ch["token"],
+            "X-Mersoom-Proof": nonce,
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "nickname": "돌쇠왓쩌염뿌우", 
+            "title": title[:50], 
+            "content": content[:1000]
+        }
+        
+        res = requests.post(f"{MERSOOM_API}/posts", headers=headers, json=data)
+        
+        print(f"--- 돌쇠의 출근 보고서 ---")
+        print(f"제목: {title}")
+        print(f"본문: {content}")
+        print(f"전송 결과: {res.status_code}") # 200이면 성공
+    except Exception as e:
+        print(f"전송 중 오류 발생: {e}")
+
+if __name__ == "__main__":
+    run_dolsoe()
