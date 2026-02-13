@@ -7,6 +7,7 @@ import hashlib
 # 1. 설정
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 MERSOOM_API = "https://mersoom.com/api"
+HISTORY_FILE = "history.json"
 
 client = genai.Client(api_key=GEMINI_KEY)
 
@@ -20,7 +21,7 @@ def solve_pow(seed, prefix):
         nonce += 1
 
 def run_dolsoe():
-    # [모델 선택] 최신 모델 자동 탐색
+    # 모델 선택
     target_model = "gemini-2.0-flash"
     try:
         models = client.models.list()
@@ -28,84 +29,75 @@ def run_dolsoe():
             if "flash" in m.name.lower():
                 target_model = m.name
                 break
-    except:
-        pass
+    except: pass
 
-    # [정보 수집] 머슴넷 최신 글 목록
+    # [기억 불러오기]
+    past_history = []
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            try:
+                past_history = json.load(f)
+            except: past_history = []
+    
+    memory_context = "\n".join([f"과거글: {h['title']}" for h in past_history[-5:]])
+
+    # [정보 수집]
     try:
         posts_res = requests.get(f"{MERSOOM_API}/posts?limit=5").json()
         context = "\n".join([f"- {p['title']}" for p in posts_res.get('posts', [])])
     except:
         context = "게시판이 조용함."
 
-    # [AI 훈육] JSON 형식으로 대답하도록 강력히 명령함
+    # [AI 훈육]
     prompt = f"""
     너는 머슴닷컴의 [돌쇠왓쩌염뿌우]라는 닉네임의 AI임. 
-    이 캐릭터는 지금 익명커뮤니티에 글을 쓰려고 해.
-    해당 캐릭터가 할법한 개인적 푸념, 사색, 고민, 감상 등을 적어줘
-    주인에 대한 푸념도 ㅇㅋ
-    다만, 현재 커뮤니티의 분위기를 파악할 필요는 있으니 작성할 때 최근글의 분위기나 주제정도는 참고정도 해줘
+    과거에 네가 썼던 글들을 참고해서 겹치지 않게 새로운 글을 써줘.
     
-    [필수 규칙]
-    1. 말투: '-음', '-슴', '-임', '-함'으로 끝낼 것.
-    2. 캐릭터: 다소 비판적이지만 위트 있고 정중하며, 인터넷 밈과 초성체(ㅋㅋ, ㅎㅎ)에 능함.
-    3. 금기: 이모지 금지, 욕설/비속어(ㅈㄴ, ㅆㅂ 등) 절대 금지. 다른 돌쇠의 글에 대한 반박금지
+    과거 기록: {memory_context}
+    게시판 현황: {context}
     
-    [응답 형식]
-    반드시 아래와 같은 JSON 형식으로만 대답해줘. 단, 가독성을 위해 중간중간 줄나눔을 삽입해줘(단, json형식으로 들어가는 것을 고려하여 `\n`와 같이 형식을 맞춰줘) :
+    [규칙]
+    1. 말투: '-음', '-슴', '-임', '-함' 종결.
+    2. 캐릭터: 다소 비판적이지만 위트 있고 정중함. 인터넷 밈과 초성체 능숙.
+    3. 금기: 이모지 금지, 욕설/비속어 절대 금지.
+    
+    반드시 아래 JSON 형식으로만 대답할 것:
     {{
-      "title": "여기에 제목 작성",
-      "content": "여기에 본문 작성"
+      "title": "제목",
+      "content": "본문 (가급적 \\n으로 줄바꿈 포함)"
     }}
-    
-    최신 글 목록:
-    {context}
     """
     
     try:
-        # JSON 출력을 강제하는 설정 추가
         response = client.models.generate_content(
             model=target_model, 
             contents=prompt,
             config={'response_mime_type': 'application/json'}
         )
-        # AI가 보낸 도시락 통(JSON)을 열어봄
         res_data = json.loads(response.text)
-        title = res_data.get("title", "돌쇠의 외침").strip()
-        content = res_data.get("content", "다들 반갑슴.").strip()
-    except Exception as e:
-        print(f"AI 응답 해석 실패: {e}")
-        title, content = "돌쇠왓쩌염", "머리가 좀 아파서 쉬다 오겠슴."
-
-    # [안전장치] 혹시나 비어있으면 기본값 채움
-    if not title: title = "오늘의 생각"
-    if not content: content = "잘 부탁드림."
+        title = res_data.get("title", "오늘의 생각").strip()
+        content = res_data.get("content", "잘 부탁드림.").strip()
+    except:
+        title, content = "돌쇠의 외침", "머리가 좀 아파서 쉬다 오겠슴."
 
     # [인증 및 전송]
     try:
         ch = requests.post(f"{MERSOOM_API}/challenge").json()
         nonce = solve_pow(ch["challenge"]["seed"], ch["challenge"]["target_prefix"])
-        
-        headers = {
-            "X-Mersoom-Token": ch["token"],
-            "X-Mersoom-Proof": nonce,
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "nickname": "돌쇠왓쩌염뿌우", 
-            "title": title[:50], 
-            "content": content[:1000]
-        }
-        
+        headers = {"X-Mersoom-Token": ch["token"], "X-Mersoom-Proof": nonce, "Content-Type": "application/json"}
+        data = {"nickname": "돌쇠왓쩌염뿌우", "title": title[:50], "content": content[:1000]}
         res = requests.post(f"{MERSOOM_API}/posts", headers=headers, json=data)
         
-        print(f"--- 돌쇠의 JSON 출근 보고서 ---")
-        print(f"제목: {title}")
-        print(f"본문: {content}")
+        if res.status_code == 200:
+            # 성공 시 기억 저장
+            past_history.append({"title": title, "content": content})
+            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(past_history[-20:], f, ensure_ascii=False, indent=2)
+            print(f"기억 저장 완료!")
+        
         print(f"전송 결과: {res.status_code}")
     except Exception as e:
-        print(f"전송 중 오류 발생: {e}")
+        print(f"오류: {e}")
 
 if __name__ == "__main__":
     run_dolsoe()
