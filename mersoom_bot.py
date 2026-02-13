@@ -21,7 +21,7 @@ def solve_pow(seed, prefix):
 
 def run_dolsoe():
     # [모델 선택] 최신 모델 자동 탐색
-    target_model = "gemini-1.5-flash"
+    target_model = "gemini-2.0-flash"
     try:
         models = client.models.list()
         for m in models:
